@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Employee Management System</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Google Fonts Inter & FontAwesome Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="login-container">
+        <div class="login-card">
+            <div class="brand-header">
+                <div class="logo-icon"><i class="fa-solid fa-building-user"></i></div>
+                <h2>Enterprise EMS</h2>
+                <p>Internal HR & Employee Portal</p>
+            </div>
+            
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="login-email"><i class="fa-solid fa-envelope"></i> Email Address</label>
+                    <input type="email" id="login-email" placeholder="name@company.com" required value="hr@company.com">
+                </div>
+                
+                <div class="form-group">
+                    <label for="login-password"><i class="fa-solid fa-lock"></i> Password</label>
+                    <input type="password" id="login-password" placeholder="••••••••" required value="Password123!">
+                </div>
+
+                <div id="login-error" class="alert alert-danger hidden"></div>
+
+                <button type="submit" class="btn btn-primary btn-block">
+                    <span>Sign In</span> <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </form>
+
+            <div class="demo-credentials">
+                <h4><i class="fa-solid fa-key"></i> Quick Login Presets:</h4>
+                <div class="preset-buttons">
+                    <button class="btn btn-sm btn-outline" onclick="fillCredentials('hr@company.com', 'Password123!')">HR Admin</button>
+                    <button class="btn btn-sm btn-outline" onclick="fillCredentials('manager@company.com', 'Password123!')">Manager</button>
+                    <button class="btn btn-sm btn-outline" onclick="fillCredentials('employee1@company.com', 'Password123!')">Employee</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APP INTERFACE -->
+    <div id="app-screen" class="app-container hidden">
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <i class="fa-solid fa-building-user brand-icon"></i>
+                <span class="brand-text">Enterprise EMS</span>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="#dashboard" class="nav-item active" data-view="dashboard">
+                    <i class="fa-solid fa-chart-line"></i> <span>Dashboard</span>
+                </a>
+                <a href="#employees" class="nav-item" data-view="employees">
+                    <i class="fa-solid fa-users"></i> <span>Employee Directory</span>
+                </a>
+                <a href="#attendance" class="nav-item" data-view="attendance">
+                    <i class="fa-solid fa-calendar-check"></i> <span>Attendance Tracker</span>
+                </a>
+                <a href="#leaves" class="nav-item" data-view="leaves">
+                    <i class="fa-solid fa-plane-departure"></i> <span>Leave Management</span>
+                </a>
+                <a href="#profile" class="nav-item" data-view="profile">
+                    <i class="fa-solid fa-id-card"></i> <span>My Profile</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-user">
+                <div class="user-avatar" id="nav-user-avatar">HR</div>
+                <div class="user-info">
+                    <div class="user-name" id="nav-user-name">Sarah Jenkins</div>
+                    <div class="user-role-badge" id="nav-user-role">HR_ADMIN</div>
+                </div>
+                <button class="btn-icon" id="logout-btn" title="Sign Out">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                </button>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            <!-- HEADER BAR -->
+            <header class="top-header">
+                <div class="header-title">
+                    <h1 id="page-title">Dashboard</h1>
+                    <p id="page-subtitle">Welcome back! Here is your organization overview.</p>
+                </div>
+                <div class="header-actions">
+                    <div class="quick-clock-widget" id="quick-clock-widget">
+                        <span id="current-time-display">--:--:--</span>
+                        <button class="btn btn-sm btn-success" id="btn-clock-in"><i class="fa-solid fa-sign-in-alt"></i> Clock In</button>
+                        <button class="btn btn-sm btn-warning hidden" id="btn-clock-out"><i class="fa-solid fa-sign-out-alt"></i> Clock Out</button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- VIEW PANELS -->
+            <div class="content-body">
+                
+                <!-- VIEW 1: DASHBOARD -->
+                <section id="view-dashboard" class="view-panel active">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon bg-blue"><i class="fa-solid fa-user-group"></i></div>
+                            <div class="stat-details">
+                                <h3>Total Employees</h3>
+                                <div class="stat-number" id="stat-total-emp">0</div>
+                                <span class="stat-label">Active staff</span>
+                            </div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-icon bg-green"><i class="fa-solid fa-user-check"></i></div>
+                            <div class="stat-details">
+                                <h3>Present Today</h3>
+                                <div class="stat-number" id="stat-present-today">0</div>
+                                <span class="stat-label" id="stat-att-rate">0% Attendance</span>
+                            </div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-icon bg-amber"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                            <div class="stat-details">
+                                <h3>Pending Leaves</h3>
+                                <div class="stat-number" id="stat-pending-leaves">0</div>
+                                <span class="stat-label">Awaiting review</span>
+                            </div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-icon bg-purple"><i class="fa-solid fa-sitemap"></i></div>
+                            <div class="stat-details">
+                                <h3>Departments</h3>
+                                <div class="stat-number" id="stat-depts-count">0</div>
+                                <span class="stat-label">Active divisions</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-building"></i> Department Distribution</h3>
+                            </div>
+                            <div class="card-body">
+                                <ul id="dept-list" class="dept-distribution-list">
+                                    <!-- Dynamic -->
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-bell"></i> Recent Leave Applications</h3>
+                            </div>
+                            <div class="card-body">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Employee</th>
+                                            <th>Type</th>
+                                            <th>Dates</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="recent-leaves-table">
+                                        <!-- Dynamic -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW 2: EMPLOYEES DIRECTORY -->
+                <section id="view-employees" class="view-panel">
+                    <div class="action-bar">
+                        <div class="search-box">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="emp-search" placeholder="Search by name, code, or department...">
+                        </div>
+                        <button class="btn btn-primary hidden" id="btn-add-employee">
+                            <i class="fa-solid fa-user-plus"></i> Add New Employee
+                        </button>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body padding-none">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Code</th>
+                                        <th>Employee</th>
+                                        <th>Designation</th>
+                                        <th>Department</th>
+                                        <th>Reporting Manager</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="employee-table-body">
+                                    <!-- Dynamic -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW 3: ATTENDANCE TRACKER -->
+                <section id="view-attendance" class="view-panel">
+                    <div class="card margin-bottom-lg">
+                        <div class="card-header flex-between">
+                            <h3><i class="fa-solid fa-clock"></i> Daily Clock In / Out Console</h3>
+                            <span class="badge badge-info" id="today-date-badge"></span>
+                        </div>
+                        <div class="card-body">
+                            <div class="clock-console">
+                                <div class="clock-status-box">
+                                    <span class="status-title">Today's Status</span>
+                                    <div class="status-value" id="console-status">Not Clocked In</div>
+                                    <div class="status-time" id="console-time-details">--</div>
+                                </div>
+                                <div class="clock-actions">
+                                    <button class="btn btn-lg btn-success" id="console-clock-in-btn">
+                                        <i class="fa-solid fa-fingerprint"></i> Clock In Now
+                                    </button>
+                                    <button class="btn btn-lg btn-warning hidden" id="console-clock-out-btn">
+                                        <i class="fa-solid fa-right-from-bracket"></i> Clock Out Now
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fa-solid fa-list-check"></i> Attendance History</h3>
+                        </div>
+                        <div class="card-body padding-none">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Employee</th>
+                                        <th>Department</th>
+                                        <th>Clock In</th>
+                                        <th>Clock Out</th>
+                                        <th>Status</th>
+                                        <th>Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="attendance-table-body">
+                                    <!-- Dynamic -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW 4: LEAVE MANAGEMENT -->
+                <section id="view-leaves" class="view-panel">
+                    <div class="leave-balance-grid">
+                        <div class="balance-card">
+                            <h4>Casual Leave</h4>
+                            <div class="balance-count" id="bal-casual">12</div>
+                            <span>days remaining</span>
+                        </div>
+                        <div class="balance-card">
+                            <h4>Sick Leave</h4>
+                            <div class="balance-count" id="bal-sick">10</div>
+                            <span>days remaining</span>
+                        </div>
+                        <div class="balance-card">
+                            <h4>Paid Leave</h4>
+                            <div class="balance-count" id="bal-paid">15</div>
+                            <span>days remaining</span>
+                        </div>
+                        <div class="balance-card action-card">
+                            <button class="btn btn-primary btn-block" id="btn-apply-leave">
+                                <i class="fa-solid fa-paper-plane"></i> Apply for Leave
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card margin-top-lg">
+                        <div class="card-header">
+                            <h3><i class="fa-solid fa-file-signature"></i> Leave Requests & Approvals</h3>
+                        </div>
+                        <div class="card-body padding-none">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Employee</th>
+                                        <th>Leave Type</th>
+                                        <th>Period</th>
+                                        <th>Days</th>
+                                        <th>Reason</th>
+                                        <th>Status</th>
+                                        <th>Reviewed By</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="leave-table-body">
+                                    <!-- Dynamic -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW 5: MY PROFILE -->
+                <section id="view-profile" class="view-panel">
+                    <div class="profile-card-container">
+                        <div class="card profile-card">
+                            <div class="profile-header">
+                                <div class="profile-avatar" id="prof-avatar">SJ</div>
+                                <div class="profile-title">
+                                    <h2 id="prof-fullname">Sarah Jenkins</h2>
+                                    <p id="prof-designation">HR Director</p>
+                                    <span class="badge badge-primary" id="prof-role-badge">HR_ADMIN</span>
+                                </div>
+                            </div>
+                            <div class="card-body border-top">
+                                <div class="profile-grid">
+                                    <div class="prof-item"><label>Employee Code:</label> <span id="prof-code">EMP-101</span></div>
+                                    <div class="prof-item"><label>Department:</label> <span id="prof-dept">Human Resources</span></div>
+                                    <div class="prof-item"><label>Email Address:</label> <span id="prof-email">hr@company.com</span></div>
+                                    <div class="prof-item"><label>Phone Number:</label> <span id="prof-phone">+15550192</span></div>
+                                    <div class="prof-item"><label>Joining Date:</label> <span id="prof-joining">2022-01-15</span></div>
+                                    <div class="prof-item"><label>Office Address:</label> <span id="prof-address">San Francisco, CA</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL 1: ADD EMPLOYEE -->
+    <div id="modal-add-emp" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-user-plus"></i> Register New Employee</h3>
+                <span class="close-modal">&times;</span>
+            </div>
+            <form id="form-add-emp">
+                <div class="modal-body grid-2">
+                    <div class="form-group">
+                        <label>First Name</label>
+                        <input type="text" id="add-fname" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Last Name</label>
+                        <input type="text" id="add-lname" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email Address</label>
+                        <input type="email" id="add-email" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Employee Code</label>
+                        <input type="text" id="add-code" placeholder="EMP-105" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Role</label>
+                        <select id="add-role">
+                            <option value="EMPLOYEE">EMPLOYEE</option>
+                            <option value="MANAGER">MANAGER</option>
+                            <option value="HR_ADMIN">HR_ADMIN</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Department</label>
+                        <input type="text" id="add-dept" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Designation</label>
+                        <input type="text" id="add-desig" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Annual Salary ($)</label>
+                        <input type="number" id="add-salary" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Joining Date</label>
+                        <input type="date" id="add-joining" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Phone</label>
+                        <input type="text" id="add-phone">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline close-modal-btn">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Employee</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 2: APPLY LEAVE -->
+    <div id="modal-apply-leave" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-paper-plane"></i> Apply for Leave</h3>
+                <span class="close-modal">&times;</span>
+            </div>
+            <form id="form-apply-leave">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Leave Type</label>
+                        <select id="leave-type">
+                            <option value="CASUAL">Casual Leave</option>
+                            <option value="SICK">Sick Leave</option>
+                            <option value="PAID">Paid Leave</option>
+                        </select>
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label>Start Date</label>
+                            <input type="date" id="leave-start" required>
+                        </div>
+                        <div class="form-group">
+                            <label>End Date</label>
+                            <input type="date" id="leave-end" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Reason for Leave</label>
+                        <textarea id="leave-reason" rows="3" required placeholder="State your reason..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline close-modal-btn">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Application</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 3: REVIEW LEAVE -->
+    <div id="modal-review-leave" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-gavel"></i> Review Leave Application</h3>
+                <span class="close-modal">&times;</span>
+            </div>
+            <form id="form-review-leave">
+                <input type="hidden" id="review-leave-id">
+                <div class="modal-body">
+                    <p id="review-leave-details" class="margin-bottom-md"></p>
+                    <div class="form-group">
+                        <label>Review Decision</label>
+                        <select id="review-status">
+                            <option value="APPROVED">APPROVE</option>
+                            <option value="REJECTED">REJECT</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Comment / Note</label>
+                        <textarea id="review-comment" rows="3" placeholder="Approval/Rejection note..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline close-modal-btn">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Decision</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
