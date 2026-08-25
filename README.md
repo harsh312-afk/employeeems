@@ -102,6 +102,8 @@ Employee Management System Server running on http://localhost:8000
 Open your web browser and navigate to:
 `http://localhost:8000`
 
+Alternatively, the deployed application is available at https://employeeems.onrender.com/
+
 ### 3. Demo Credentials
 
 Use any of the pre-seeded accounts to experience role-specific features:
