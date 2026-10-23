@@ -1,4 +1,15 @@
+<p align="center">
+  <img src="frontend/favicon.svg" width="96" height="96" alt="Enterprise EMS Logo" />
+</p>
+
 # Enterprise Employee Management System (EMS)
+
+[![Vercel Deployment](https://img.shields.io/badge/Vercel-Live%20Demo-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://employeeems.vercel.app)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12%20Standard%20Lib-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![Zero External Dependencies](https://img.shields.io/badge/Dependencies-Zero%20External-success?style=for-the-badge)]()
+[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)]()
+
+> 🌐 **Live Web Application**: **[https://employeeems.vercel.app](https://employeeems.vercel.app)**
 
 An end-to-end, full-stack internal enterprise web application built to streamline Human Resource operations, manage employee records, enforce Role-Based Access Control (RBAC), track daily attendance with work duration metrics, and process leave approvals with data integrity, security, and CSV reporting.
 

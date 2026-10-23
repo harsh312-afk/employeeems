@@ -120,6 +120,15 @@ def serve_static_file(path, start_response):
     else:
         filepath = os.path.join(STATIC_DIR, path.lstrip('/'))
 
+    if path == '/favicon.ico' and not os.path.exists(filepath):
+        svg_path = os.path.join(STATIC_DIR, 'favicon.svg')
+        if os.path.exists(svg_path):
+            with open(svg_path, 'rb') as f:
+                content = f.read()
+            return send_wsgi_response(start_response, 200, 'image/svg+xml', content, [
+                ('Cache-Control', 'public, max-age=3600')
+            ])
+
     if os.path.exists(filepath) and os.path.isfile(filepath):
         content_type = 'text/html; charset=utf-8'
         if filepath.endswith('.css'):
