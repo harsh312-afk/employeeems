@@ -3,15 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enterprise Employee Management System</title>
+    <title>Enterprise EMS | Employee Management & HR Portal</title>
     <link rel="stylesheet" href="css/style.css">
     <!-- Google Fonts Inter & FontAwesome Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="toast-container" class="toast-container"></div>
 
     <!-- LOGIN SCREEN -->
     <div id="login-screen" class="login-container">
@@ -19,23 +22,28 @@
             <div class="brand-header">
                 <div class="logo-icon"><i class="fa-solid fa-building-user"></i></div>
                 <h2>Enterprise EMS</h2>
-                <p>Internal HR & Employee Portal</p>
+                <p>Human Capital & Operations Portal</p>
             </div>
             
             <form id="login-form">
                 <div class="form-group">
-                    <label for="login-email"><i class="fa-solid fa-envelope"></i> Email Address</label>
+                    <label for="login-email"><i class="fa-solid fa-envelope"></i> Work Email</label>
                     <input type="email" id="login-email" placeholder="name@company.com" required value="hr@company.com">
                 </div>
                 
                 <div class="form-group">
                     <label for="login-password"><i class="fa-solid fa-lock"></i> Password</label>
-                    <input type="password" id="login-password" placeholder="••••••••" required value="Password123!">
+                    <div class="input-with-icon">
+                        <input type="password" id="login-password" placeholder="••••••••" required value="Password123!">
+                        <button type="button" class="btn-toggle-pwd" onclick="togglePasswordVisibility('login-password')">
+                            <i class="fa-regular fa-eye"></i>
+                        </button>
+                    </div>
                 </div>
 
                 <div id="login-error" class="alert alert-danger hidden"></div>
 
-                <button type="submit" class="btn btn-primary btn-block">
+                <button type="submit" class="btn btn-primary btn-block" id="btn-submit-login">
                     <span>Sign In</span> <i class="fa-solid fa-arrow-right"></i>
                 </button>
             </form>
@@ -43,9 +51,18 @@
             <div class="demo-credentials">
                 <h4><i class="fa-solid fa-key"></i> Quick Login Presets:</h4>
                 <div class="preset-buttons">
-                    <button class="btn btn-sm btn-outline" onclick="fillCredentials('hr@company.com', 'Password123!')">HR Admin</button>
-                    <button class="btn btn-sm btn-outline" onclick="fillCredentials('manager@company.com', 'Password123!')">Manager</button>
-                    <button class="btn btn-sm btn-outline" onclick="fillCredentials('employee1@company.com', 'Password123!')">Employee</button>
+                    <button class="btn btn-sm btn-outline" onclick="fillCredentials('hr@company.com', 'Password123!')">
+                        <i class="fa-solid fa-user-shield"></i> HR Admin
+                    </button>
+                    <button class="btn btn-sm btn-outline" onclick="fillCredentials('manager@company.com', 'Password123!')">
+                        <i class="fa-solid fa-user-tie"></i> Manager
+                    </button>
+                    <button class="btn btn-sm btn-outline" onclick="fillCredentials('employee1@company.com', 'Password123!')">
+                        <i class="fa-solid fa-code"></i> Engineer
+                    </button>
+                    <button class="btn btn-sm btn-outline" onclick="fillCredentials('employee2@company.com', 'Password123!')">
+                        <i class="fa-solid fa-pen-nib"></i> Designer
+                    </button>
                 </div>
             </div>
         </div>
@@ -53,8 +70,11 @@
 
     <!-- MAIN APP INTERFACE -->
     <div id="app-screen" class="app-container hidden">
+        <!-- SIDEBAR OVERLAY FOR MOBILE -->
+        <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
         <!-- SIDEBAR -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-brand">
                 <i class="fa-solid fa-building-user brand-icon"></i>
                 <span class="brand-text">Enterprise EMS</span>
@@ -94,12 +114,18 @@
         <main class="main-content">
             <!-- HEADER BAR -->
             <header class="top-header">
-                <div class="header-title">
-                    <h1 id="page-title">Dashboard</h1>
-                    <p id="page-subtitle">Welcome back! Here is your organization overview.</p>
+                <div class="header-left">
+                    <button class="btn-mobile-toggle" id="btn-mobile-toggle" title="Toggle Navigation">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
+                    <div class="header-title">
+                        <h1 id="page-title">Dashboard</h1>
+                        <p id="page-subtitle">Welcome back! Here is your organization overview.</p>
+                    </div>
                 </div>
                 <div class="header-actions">
                     <div class="quick-clock-widget" id="quick-clock-widget">
+                        <i class="fa-regular fa-clock clock-icon"></i>
                         <span id="current-time-display">--:--:--</span>
                         <button class="btn btn-sm btn-success" id="btn-clock-in"><i class="fa-solid fa-sign-in-alt"></i> Clock In</button>
                         <button class="btn btn-sm btn-warning hidden" id="btn-clock-out"><i class="fa-solid fa-sign-out-alt"></i> Clock Out</button>
@@ -118,7 +144,7 @@
                             <div class="stat-details">
                                 <h3>Total Employees</h3>
                                 <div class="stat-number" id="stat-total-emp">0</div>
-                                <span class="stat-label">Active staff</span>
+                                <span class="stat-label">Active headcount</span>
                             </div>
                         </div>
 
@@ -145,7 +171,7 @@
                             <div class="stat-details">
                                 <h3>Departments</h3>
                                 <div class="stat-number" id="stat-depts-count">0</div>
-                                <span class="stat-label">Active divisions</span>
+                                <span class="stat-label">Active teams</span>
                             </div>
                         </div>
                     </div>
@@ -166,17 +192,70 @@
                             <div class="card-header">
                                 <h3><i class="fa-solid fa-bell"></i> Recent Leave Applications</h3>
                             </div>
-                            <div class="card-body">
+                            <div class="card-body padding-none">
+                                <div class="table-responsive">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Employee</th>
+                                                <th>Type</th>
+                                                <th>Period</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="recent-leaves-table">
+                                            <!-- Dynamic -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW 2: EMPLOYEES DIRECTORY -->
+                <section id="view-employees" class="view-panel">
+                    <div class="action-bar flex-wrap">
+                        <div class="filter-controls">
+                            <div class="search-box">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text" id="emp-search" placeholder="Search by name, code, role...">
+                            </div>
+                            <select id="emp-dept-filter" class="form-select">
+                                <option value="">All Departments</option>
+                            </select>
+                            <select id="emp-status-filter" class="form-select">
+                                <option value="">All Statuses</option>
+                                <option value="ACTIVE">Active</option>
+                                <option value="INACTIVE">Inactive</option>
+                            </select>
+                        </div>
+                        <div class="action-buttons">
+                            <button class="btn btn-outline" id="btn-export-employees">
+                                <i class="fa-solid fa-file-csv"></i> Export CSV
+                            </button>
+                            <button class="btn btn-primary hidden" id="btn-add-employee">
+                                <i class="fa-solid fa-user-plus"></i> Add Employee
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body padding-none">
+                            <div class="table-responsive">
                                 <table class="data-table">
                                     <thead>
                                         <tr>
+                                            <th>Code</th>
                                             <th>Employee</th>
-                                            <th>Type</th>
-                                            <th>Dates</th>
+                                            <th>Designation</th>
+                                            <th>Department</th>
+                                            <th>Reporting Manager</th>
                                             <th>Status</th>
+                                            <th>Actions</th>
                                         </tr>
                                     </thead>
-                                    <tbody id="recent-leaves-table">
+                                    <tbody id="employee-table-body">
                                         <!-- Dynamic -->
                                     </tbody>
                                 </table>
@@ -185,87 +264,90 @@
                     </div>
                 </section>
 
-                <!-- VIEW 2: EMPLOYEES DIRECTORY -->
-                <section id="view-employees" class="view-panel">
-                    <div class="action-bar">
-                        <div class="search-box">
-                            <i class="fa-solid fa-magnifying-glass"></i>
-                            <input type="text" id="emp-search" placeholder="Search by name, code, or department...">
-                        </div>
-                        <button class="btn btn-primary hidden" id="btn-add-employee">
-                            <i class="fa-solid fa-user-plus"></i> Add New Employee
-                        </button>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-body padding-none">
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Code</th>
-                                        <th>Employee</th>
-                                        <th>Designation</th>
-                                        <th>Department</th>
-                                        <th>Reporting Manager</th>
-                                        <th>Status</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="employee-table-body">
-                                    <!-- Dynamic -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </section>
-
                 <!-- VIEW 3: ATTENDANCE TRACKER -->
                 <section id="view-attendance" class="view-panel">
-                    <div class="card margin-bottom-lg">
-                        <div class="card-header flex-between">
-                            <h3><i class="fa-solid fa-clock"></i> Daily Clock In / Out Console</h3>
-                            <span class="badge badge-info" id="today-date-badge"></span>
-                        </div>
-                        <div class="card-body">
-                            <div class="clock-console">
-                                <div class="clock-status-box">
-                                    <span class="status-title">Today's Status</span>
-                                    <div class="status-value" id="console-status">Not Clocked In</div>
-                                    <div class="status-time" id="console-time-details">--</div>
+                    <div class="attendance-top-grid">
+                        <div class="card console-card">
+                            <div class="card-header flex-between">
+                                <h3><i class="fa-solid fa-clock"></i> Daily Clock In / Out Console</h3>
+                                <span class="badge badge-info" id="today-date-badge"></span>
+                            </div>
+                            <div class="card-body">
+                                <div class="clock-console">
+                                    <div class="clock-status-box">
+                                        <span class="status-title">Today's State</span>
+                                        <div class="status-value" id="console-status">Not Clocked In</div>
+                                        <div class="status-time" id="console-time-details">Mark your daily presence</div>
+                                    </div>
+                                    <div class="clock-actions">
+                                        <button class="btn btn-lg btn-success" id="console-clock-in-btn">
+                                            <i class="fa-solid fa-fingerprint"></i> Clock In Now
+                                        </button>
+                                        <button class="btn btn-lg btn-warning hidden" id="console-clock-out-btn">
+                                            <i class="fa-solid fa-right-from-bracket"></i> Clock Out Now
+                                        </button>
+                                    </div>
                                 </div>
-                                <div class="clock-actions">
-                                    <button class="btn btn-lg btn-success" id="console-clock-in-btn">
-                                        <i class="fa-solid fa-fingerprint"></i> Clock In Now
-                                    </button>
-                                    <button class="btn btn-lg btn-warning hidden" id="console-clock-out-btn">
-                                        <i class="fa-solid fa-right-from-bracket"></i> Clock Out Now
-                                    </button>
+                            </div>
+                        </div>
+
+                        <div class="card summary-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-calendar-days"></i> Monthly Summary</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="month-stats-grid">
+                                    <div class="month-stat-item">
+                                        <span class="m-val" id="month-stat-present">0</span>
+                                        <span class="m-lbl">Days Present</span>
+                                    </div>
+                                    <div class="month-stat-item">
+                                        <span class="m-val text-warning" id="month-stat-late">0</span>
+                                        <span class="m-lbl">Late Arrivals</span>
+                                    </div>
+                                    <div class="month-stat-item">
+                                        <span class="m-val text-primary" id="month-stat-hours">0h</span>
+                                        <span class="m-lbl">Hours Worked</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="card">
-                        <div class="card-header">
+                    <div class="card margin-top-lg">
+                        <div class="card-header flex-between flex-wrap">
                             <h3><i class="fa-solid fa-list-check"></i> Attendance History</h3>
+                            <div class="table-header-filters">
+                                <select id="att-status-filter" class="form-select form-select-sm">
+                                    <option value="">All Statuses</option>
+                                    <option value="PRESENT">Present</option>
+                                    <option value="LATE">Late</option>
+                                </select>
+                                <button class="btn btn-sm btn-outline" id="btn-export-attendance">
+                                    <i class="fa-solid fa-file-csv"></i> Export CSV
+                                </button>
+                            </div>
                         </div>
                         <div class="card-body padding-none">
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Employee</th>
-                                        <th>Department</th>
-                                        <th>Clock In</th>
-                                        <th>Clock Out</th>
-                                        <th>Status</th>
-                                        <th>Notes</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="attendance-table-body">
-                                    <!-- Dynamic -->
-                                </tbody>
-                            </table>
+                            <div class="table-responsive">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Employee</th>
+                                            <th>Department</th>
+                                            <th>Clock In</th>
+                                            <th>Clock Out</th>
+                                            <th>Duration</th>
+                                            <th>Status</th>
+                                            <th>Notes</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="attendance-table-body">
+                                        <!-- Dynamic -->
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -274,56 +356,76 @@
                 <section id="view-leaves" class="view-panel">
                     <div class="leave-balance-grid">
                         <div class="balance-card">
-                            <h4>Casual Leave</h4>
-                            <div class="balance-count" id="bal-casual">12</div>
-                            <span>days remaining</span>
+                            <div class="bal-icon"><i class="fa-solid fa-mug-hot"></i></div>
+                            <div>
+                                <h4>Casual Leave</h4>
+                                <div class="balance-count" id="bal-casual">12</div>
+                                <span>days remaining</span>
+                            </div>
                         </div>
                         <div class="balance-card">
-                            <h4>Sick Leave</h4>
-                            <div class="balance-count" id="bal-sick">10</div>
-                            <span>days remaining</span>
+                            <div class="bal-icon text-warning"><i class="fa-solid fa-heart-pulse"></i></div>
+                            <div>
+                                <h4>Sick Leave</h4>
+                                <div class="balance-count" id="bal-sick">10</div>
+                                <span>days remaining</span>
+                            </div>
                         </div>
                         <div class="balance-card">
-                            <h4>Paid Leave</h4>
-                            <div class="balance-count" id="bal-paid">15</div>
-                            <span>days remaining</span>
+                            <div class="bal-icon text-success"><i class="fa-solid fa-umbrella-beach"></i></div>
+                            <div>
+                                <h4>Paid Leave</h4>
+                                <div class="balance-count" id="bal-paid">15</div>
+                                <span>days remaining</span>
+                            </div>
                         </div>
                         <div class="balance-card action-card">
-                            <button class="btn btn-primary btn-block" id="btn-apply-leave">
+                            <button class="btn btn-primary btn-block btn-lg" id="btn-apply-leave">
                                 <i class="fa-solid fa-paper-plane"></i> Apply for Leave
                             </button>
                         </div>
                     </div>
 
                     <div class="card margin-top-lg">
-                        <div class="card-header">
-                            <h3><i class="fa-solid fa-file-signature"></i> Leave Requests & Approvals</h3>
+                        <div class="card-header flex-between flex-wrap">
+                            <h3><i class="fa-solid fa-file-signature"></i> Leave Requests & Workflow</h3>
+                            <div class="table-header-filters">
+                                <select id="leave-status-filter" class="form-select form-select-sm">
+                                    <option value="">All Statuses</option>
+                                    <option value="PENDING">Pending</option>
+                                    <option value="APPROVED">Approved</option>
+                                    <option value="REJECTED">Rejected</option>
+                                    <option value="CANCELLED">Cancelled</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="card-body padding-none">
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Employee</th>
-                                        <th>Leave Type</th>
-                                        <th>Period</th>
-                                        <th>Days</th>
-                                        <th>Reason</th>
-                                        <th>Status</th>
-                                        <th>Reviewed By</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="leave-table-body">
-                                    <!-- Dynamic -->
-                                </tbody>
-                            </table>
+                            <div class="table-responsive">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Employee</th>
+                                            <th>Type</th>
+                                            <th>Period</th>
+                                            <th>Days</th>
+                                            <th>Reason</th>
+                                            <th>Status</th>
+                                            <th>Reviewed By</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="leave-table-body">
+                                        <!-- Dynamic -->
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </section>
 
                 <!-- VIEW 5: MY PROFILE -->
                 <section id="view-profile" class="view-panel">
-                    <div class="profile-card-container">
+                    <div class="profile-layout-grid">
                         <div class="card profile-card">
                             <div class="profile-header">
                                 <div class="profile-avatar" id="prof-avatar">SJ</div>
@@ -338,9 +440,74 @@
                                     <div class="prof-item"><label>Employee Code:</label> <span id="prof-code">EMP-101</span></div>
                                     <div class="prof-item"><label>Department:</label> <span id="prof-dept">Human Resources</span></div>
                                     <div class="prof-item"><label>Email Address:</label> <span id="prof-email">hr@company.com</span></div>
-                                    <div class="prof-item"><label>Phone Number:</label> <span id="prof-phone">+15550192</span></div>
+                                    <div class="prof-item"><label>Phone Number:</label> <span id="prof-phone">+1 (555) 019-2001</span></div>
                                     <div class="prof-item"><label>Joining Date:</label> <span id="prof-joining">2022-01-15</span></div>
                                     <div class="prof-item"><label>Office Address:</label> <span id="prof-address">San Francisco, CA</span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="profile-settings-stack">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3><i class="fa-solid fa-address-book"></i> Update Contact Details</h3>
+                                </div>
+                                <div class="card-body">
+                                    <form id="form-update-profile">
+                                        <div class="form-group">
+                                            <label>Phone Number</label>
+                                            <input type="text" id="prof-edit-phone" placeholder="+1 (555) 000-0000">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Office / Residential Address</label>
+                                            <input type="text" id="prof-edit-address" placeholder="City, State, Country">
+                                        </div>
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fa-solid fa-floppy-disk"></i> Save Contact Info
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <div class="card margin-top-md">
+                                <div class="card-header">
+                                    <h3><i class="fa-solid fa-shield-halved"></i> Security & Password</h3>
+                                </div>
+                                <div class="card-body">
+                                    <form id="form-change-password">
+                                        <div class="form-group">
+                                            <label>Current Password</label>
+                                            <div class="input-with-icon">
+                                                <input type="password" id="pwd-current" required placeholder="Enter current password">
+                                                <button type="button" class="btn-toggle-pwd" onclick="togglePasswordVisibility('pwd-current')">
+                                                    <i class="fa-regular fa-eye"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="grid-2">
+                                            <div class="form-group">
+                                                <label>New Password</label>
+                                                <div class="input-with-icon">
+                                                    <input type="password" id="pwd-new" required minlength="6" placeholder="Min. 6 chars">
+                                                    <button type="button" class="btn-toggle-pwd" onclick="togglePasswordVisibility('pwd-new')">
+                                                        <i class="fa-regular fa-eye"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Confirm New Password</label>
+                                                <div class="input-with-icon">
+                                                    <input type="password" id="pwd-confirm" required minlength="6" placeholder="Repeat new password">
+                                                    <button type="button" class="btn-toggle-pwd" onclick="togglePasswordVisibility('pwd-confirm')">
+                                                        <i class="fa-regular fa-eye"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fa-solid fa-key"></i> Update Password
+                                        </button>
+                                    </form>
                                 </div>
                             </div>
                         </div>
@@ -361,59 +528,137 @@
             <form id="form-add-emp">
                 <div class="modal-body grid-2">
                     <div class="form-group">
-                        <label>First Name</label>
-                        <input type="text" id="add-fname" required>
+                        <label>First Name *</label>
+                        <input type="text" id="add-fname" required placeholder="e.g. Rachel">
                     </div>
                     <div class="form-group">
-                        <label>Last Name</label>
-                        <input type="text" id="add-lname" required>
+                        <label>Last Name *</label>
+                        <input type="text" id="add-lname" required placeholder="e.g. Green">
                     </div>
                     <div class="form-group">
-                        <label>Email Address</label>
-                        <input type="email" id="add-email" required>
+                        <label>Work Email *</label>
+                        <input type="email" id="add-email" required placeholder="name@company.com">
                     </div>
                     <div class="form-group">
-                        <label>Employee Code</label>
-                        <input type="text" id="add-code" placeholder="EMP-105" required>
+                        <label>Employee Code *</label>
+                        <input type="text" id="add-code" placeholder="EMP-107" required>
                     </div>
                     <div class="form-group">
-                        <label>Role</label>
-                        <select id="add-role">
+                        <label>Access Role *</label>
+                        <select id="add-role" class="form-select">
                             <option value="EMPLOYEE">EMPLOYEE</option>
                             <option value="MANAGER">MANAGER</option>
                             <option value="HR_ADMIN">HR_ADMIN</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Department</label>
-                        <input type="text" id="add-dept" required>
+                        <label>Department *</label>
+                        <input type="text" id="add-dept" required placeholder="e.g. Engineering">
                     </div>
                     <div class="form-group">
-                        <label>Designation</label>
-                        <input type="text" id="add-desig" required>
+                        <label>Designation *</label>
+                        <input type="text" id="add-desig" required placeholder="e.g. DevOps Engineer">
                     </div>
                     <div class="form-group">
-                        <label>Annual Salary ($)</label>
-                        <input type="number" id="add-salary" required>
+                        <label>Annual Salary ($) *</label>
+                        <input type="number" id="add-salary" required placeholder="e.g. 85000">
                     </div>
                     <div class="form-group">
-                        <label>Joining Date</label>
+                        <label>Reporting Manager</label>
+                        <select id="add-manager" class="form-select">
+                            <option value="">No Manager (Top Level)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Joining Date *</label>
                         <input type="date" id="add-joining" required>
                     </div>
                     <div class="form-group">
-                        <label>Phone</label>
-                        <input type="text" id="add-phone">
+                        <label>Phone Number</label>
+                        <input type="text" id="add-phone" placeholder="+1 (555) 000-0000">
+                    </div>
+                    <div class="form-group">
+                        <label>Initial Password</label>
+                        <input type="text" id="add-pwd" value="Password123!" required>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline close-modal-btn">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Employee</button>
+                    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Save Employee</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- MODAL 2: APPLY LEAVE -->
+    <!-- MODAL 2: EDIT EMPLOYEE -->
+    <div id="modal-edit-emp" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-user-pen"></i> Edit Employee Record</h3>
+                <span class="close-modal">&times;</span>
+            </div>
+            <form id="form-edit-emp">
+                <input type="hidden" id="edit-emp-id">
+                <div class="modal-body grid-2">
+                    <div class="form-group">
+                        <label>First Name</label>
+                        <input type="text" id="edit-fname" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Last Name</label>
+                        <input type="text" id="edit-lname" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Designation</label>
+                        <input type="text" id="edit-desig" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Department</label>
+                        <input type="text" id="edit-dept" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Annual Salary ($)</label>
+                        <input type="number" id="edit-salary" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Reporting Manager</label>
+                        <select id="edit-manager" class="form-select">
+                            <option value="">None</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>System Role</label>
+                        <select id="edit-role" class="form-select">
+                            <option value="EMPLOYEE">EMPLOYEE</option>
+                            <option value="MANAGER">MANAGER</option>
+                            <option value="HR_ADMIN">HR_ADMIN</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Employment Status</label>
+                        <select id="edit-status" class="form-select">
+                            <option value="ACTIVE">ACTIVE</option>
+                            <option value="INACTIVE">INACTIVE</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Phone Number</label>
+                        <input type="text" id="edit-phone">
+                    </div>
+                    <div class="form-group">
+                        <label>Address</label>
+                        <input type="text" id="edit-address">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline close-modal-btn">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Update Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 3: APPLY LEAVE -->
     <div id="modal-apply-leave" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -423,11 +668,12 @@
             <form id="form-apply-leave">
                 <div class="modal-body">
                     <div class="form-group">
-                        <label>Leave Type</label>
-                        <select id="leave-type">
-                            <option value="CASUAL">Casual Leave</option>
-                            <option value="SICK">Sick Leave</option>
-                            <option value="PAID">Paid Leave</option>
+                        <label>Leave Category</label>
+                        <select id="leave-type" class="form-select">
+                            <option value="CASUAL">Casual Leave (Personal / Urgent)</option>
+                            <option value="SICK">Sick Leave (Medical / Health)</option>
+                            <option value="PAID">Paid Leave (Vacation)</option>
+                            <option value="UNPAID">Unpaid Leave</option>
                         </select>
                     </div>
                     <div class="grid-2">
@@ -442,18 +688,18 @@
                     </div>
                     <div class="form-group">
                         <label>Reason for Leave</label>
-                        <textarea id="leave-reason" rows="3" required placeholder="State your reason..."></textarea>
+                        <textarea id="leave-reason" rows="3" required placeholder="Detail the purpose of your leave request..."></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline close-modal-btn">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Submit Application</button>
+                    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i> Submit Request</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- MODAL 3: REVIEW LEAVE -->
+    <!-- MODAL 4: REVIEW LEAVE -->
     <div id="modal-review-leave" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -463,24 +709,41 @@
             <form id="form-review-leave">
                 <input type="hidden" id="review-leave-id">
                 <div class="modal-body">
-                    <p id="review-leave-details" class="margin-bottom-md"></p>
+                    <div id="review-leave-details" class="alert alert-info margin-bottom-md"></div>
                     <div class="form-group">
                         <label>Review Decision</label>
-                        <select id="review-status">
-                            <option value="APPROVED">APPROVE</option>
-                            <option value="REJECTED">REJECT</option>
+                        <select id="review-status" class="form-select">
+                            <option value="APPROVED">APPROVE Request</option>
+                            <option value="REJECTED">REJECT Request</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Comment / Note</label>
-                        <textarea id="review-comment" rows="3" placeholder="Approval/Rejection note..."></textarea>
+                        <label>Reviewer Comments / Justification</label>
+                        <textarea id="review-comment" rows="3" placeholder="Provide note or justification..."></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline close-modal-btn">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Submit Decision</button>
+                    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Submit Decision</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- MODAL 5: CONFIRMATION MODAL -->
+    <div id="modal-confirm" class="modal">
+        <div class="modal-content modal-content-sm">
+            <div class="modal-header">
+                <h3 id="confirm-modal-title"><i class="fa-solid fa-triangle-exclamation text-warning"></i> Confirm Action</h3>
+                <span class="close-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-modal-message" class="text-secondary"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline close-modal-btn" id="btn-confirm-cancel">Cancel</button>
+                <button type="button" class="btn btn-danger" id="btn-confirm-accept">Proceed</button>
+            </div>
         </div>
     </div>
 
