@@ -1,5 +1,3 @@
-import http.server
-import socketserver
 import json
 import sqlite3
 import os
@@ -9,6 +7,7 @@ import csv
 import io
 import urllib.parse
 from datetime import datetime, timedelta, date
+from wsgiref.simple_server import make_server
 
 # Ensure backend directory is in sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -24,42 +23,8 @@ if not os.path.exists(STATIC_DIR):
 # Ensure database is initialized
 init_db()
 
-def get_clean_path(handler):
-    """
-    Extracts the logical API request path and query parameters,
-    normalizing across local http.server, reverse proxies, and Vercel serverless rewrites.
-    """
-    # 1. Check Vercel/proxy headers
-    for hdr in ['x-matched-path', 'x-forwarded-uri', 'x-rewrite-url', 'x-original-uri']:
-        val = handler.headers.get(hdr)
-        if val and val.startswith('/api'):
-            parsed = urllib.parse.urlparse(val)
-            return parsed.path, parsed.query
-
-    # 2. Check query parameter route rewrite (?__route__=...)
-    parsed = urllib.parse.urlparse(handler.path)
-    qparams = urllib.parse.parse_qs(parsed.query)
-    if '__route__' in qparams:
-        route = qparams['__route__'][0].lstrip('/')
-        clean_path = f"/api/{route}"
-        # remove __route__ from query string
-        q_cleaned = urllib.parse.urlencode({k: v for k, v in qparams.items() if k != '__route__'}, doseq=True)
-        return clean_path, q_cleaned
-
-    return parsed.path, parsed.query
-
-def parse_json_body(handler):
-    content_length = int(handler.headers.get('Content-Length', 0))
-    if content_length > 0:
-        body = handler.rfile.read(content_length).decode('utf-8')
-        try:
-            return json.loads(body)
-        except Exception:
-            return {}
-    return {}
-
-def get_auth_token(handler):
-    auth_header = handler.headers.get('Authorization', '')
+def get_auth_token(environ):
+    auth_header = environ.get('HTTP_AUTHORIZATION', '')
     if auth_header.startswith('Bearer '):
         return auth_header.split(' ', 1)[1].strip()
     return None
@@ -99,99 +64,123 @@ def calculate_hours_worked(clock_in_str, clock_out_str):
         pass
     return 0.0
 
-class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
-    def send_json(self, data, status=200):
-        body = json.dumps(data).encode('utf-8')
-        self.send_response(status)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Content-Length', str(len(body)))
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        self.end_headers()
-        self.wfile.write(body)
+def send_wsgi_response(start_response, status_code, content_type, body_bytes, extra_headers=None):
+    status_text = {
+        200: "200 OK",
+        201: "201 Created",
+        400: "400 Bad Request",
+        401: "401 Unauthorized",
+        403: "403 Forbidden",
+        404: "404 Not Found",
+        500: "500 Internal Server Error"
+    }.get(status_code, f"{status_code} Unknown")
 
-    def send_csv(self, filename, csv_data):
-        body = csv_data.encode('utf-8')
-        self.send_response(200)
-        self.send_header('Content-Type', 'text/csv; charset=utf-8')
-        self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
-        self.send_header('Content-Length', str(len(body)))
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers()
-        self.wfile.write(body)
+    headers = [
+        ('Content-Type', content_type),
+        ('Content-Length', str(len(body_bytes))),
+        ('Access-Control-Allow-Origin', '*'),
+        ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS'),
+        ('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    ]
+    if extra_headers:
+        headers.extend(extra_headers)
 
-    def send_error_json(self, message, status=400):
-        self.send_json({'error': message, 'success': False}, status=status)
+    start_response(status_text, headers)
+    return [body_bytes]
 
-    def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        self.send_header('Content-Length', '0')
-        self.end_headers()
+def send_json(start_response, data, status=200):
+    body = json.dumps(data).encode('utf-8')
+    return send_wsgi_response(start_response, status, 'application/json; charset=utf-8', body)
 
-    def do_GET(self):
-        path, query_str = get_clean_path(self)
+def send_error_json(start_response, message, status=400):
+    return send_json(start_response, {'error': message, 'success': False}, status=status)
 
-        if path.startswith('/api/'):
-            self.handle_api_get(path, query_str)
-        else:
-            self.serve_static_file(path)
+def send_csv(start_response, filename, csv_data):
+    body = csv_data.encode('utf-8')
+    return send_wsgi_response(start_response, 200, 'text/csv; charset=utf-8', body, [
+        ('Content-Disposition', f'attachment; filename="{filename}"')
+    ])
 
-    def serve_static_file(self, path):
-        if path in ('/', '', '/index.html'):
-            filepath = os.path.join(STATIC_DIR, 'index.html')
-        else:
-            filepath = os.path.join(STATIC_DIR, path.lstrip('/'))
+def parse_json_body(environ):
+    try:
+        content_length = int(environ.get('CONTENT_LENGTH', 0))
+    except (ValueError, TypeError):
+        content_length = 0
+    if content_length > 0:
+        raw = environ['wsgi.input'].read(content_length).decode('utf-8')
+        try:
+            return json.loads(raw)
+        except Exception:
+            return {}
+    return {}
 
-        if os.path.exists(filepath) and os.path.isfile(filepath):
-            content_type = 'text/html; charset=utf-8'
-            if filepath.endswith('.css'):
-                content_type = 'text/css; charset=utf-8'
-            elif filepath.endswith('.js'):
-                content_type = 'application/javascript; charset=utf-8'
-            elif filepath.endswith('.json'):
-                content_type = 'application/json; charset=utf-8'
-            elif filepath.endswith('.svg'):
-                content_type = 'image/svg+xml'
-            elif filepath.endswith('.png'):
-                content_type = 'image/png'
-            elif filepath.endswith('.ico'):
-                content_type = 'image/x-icon'
+def serve_static_file(path, start_response):
+    if path in ('/', '', '/index.html'):
+        filepath = os.path.join(STATIC_DIR, 'index.html')
+    else:
+        filepath = os.path.join(STATIC_DIR, path.lstrip('/'))
 
-            with open(filepath, 'rb') as f:
+    if os.path.exists(filepath) and os.path.isfile(filepath):
+        content_type = 'text/html; charset=utf-8'
+        if filepath.endswith('.css'):
+            content_type = 'text/css; charset=utf-8'
+        elif filepath.endswith('.js'):
+            content_type = 'application/javascript; charset=utf-8'
+        elif filepath.endswith('.json'):
+            content_type = 'application/json; charset=utf-8'
+        elif filepath.endswith('.svg'):
+            content_type = 'image/svg+xml'
+        elif filepath.endswith('.png'):
+            content_type = 'image/png'
+        elif filepath.endswith('.ico'):
+            content_type = 'image/x-icon'
+
+        with open(filepath, 'rb') as f:
+            content = f.read()
+
+        return send_wsgi_response(start_response, 200, content_type, content, [
+            ('Cache-Control', 'public, max-age=3600')
+        ])
+    else:
+        index_path = os.path.join(STATIC_DIR, 'index.html')
+        if os.path.exists(index_path):
+            with open(index_path, 'rb') as f:
                 content = f.read()
+            return send_wsgi_response(start_response, 200, 'text/html; charset=utf-8', content)
+        return send_wsgi_response(start_response, 404, 'text/plain; charset=utf-8', b'File Not Found')
 
-            self.send_response(200)
-            self.send_header('Content-Type', content_type)
-            self.send_header('Content-Length', str(len(content)))
-            self.send_header('Cache-Control', 'public, max-age=3600')
-            self.end_headers()
-            self.wfile.write(content)
-        else:
-            # Fallback to index.html for SPA routing
-            index_path = os.path.join(STATIC_DIR, 'index.html')
-            if os.path.exists(index_path):
-                with open(index_path, 'rb') as f:
-                    content = f.read()
-                self.send_response(200)
-                self.send_header('Content-Type', 'text/html; charset=utf-8')
-                self.send_header('Content-Length', str(len(content)))
-                self.end_headers()
-                self.wfile.write(content)
-            else:
-                self.send_error(404, "File Not Found")
+# ==========================================
+# WSGI APPLICATION CONTROLLER
+# ==========================================
+def app(environ, start_response):
+    path = environ.get('PATH_INFO', '/')
+    method = environ.get('REQUEST_METHOD', 'GET').upper()
+    query_str = environ.get('QUERY_STRING', '')
 
-    def handle_api_get(self, path, query_str):
-        token = get_auth_token(self)
+    # Normalize rewrites if query parameter __route__ was injected
+    qparams = urllib.parse.parse_qs(query_str) if query_str else {}
+    if '__route__' in qparams:
+        route = qparams['__route__'][0].lstrip('/')
+        path = f"/api/{route}"
+
+    # Handle CORS Preflight
+    if method == 'OPTIONS':
+        return send_wsgi_response(start_response, 200, 'text/plain', b'')
+
+    # Static assets or SPA routing
+    if not path.startswith('/api/'):
+        return serve_static_file(path, start_response)
+
+    # ----------------------------------------------------
+    # GET Endpoints
+    # ----------------------------------------------------
+    if method == 'GET':
+        token = get_auth_token(environ)
         user = get_current_user(token)
-        qparams = urllib.parse.parse_qs(query_str) if query_str else {}
 
         if path == '/api/auth/me':
             if not user:
-                return self.send_error_json('Unauthorized or session expired', 401)
+                return send_error_json(start_response, 'Unauthorized or session expired', 401)
             conn = get_db_connection()
             c = conn.cursor()
             c.execute('SELECT * FROM employees WHERE user_id = ?', (user['id'],))
@@ -203,19 +192,19 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
             leaves_dict = dict(leaves) if leaves else {'casual_leave': 12, 'sick_leave': 10, 'paid_leave': 15}
             conn.close()
 
-            return self.send_json({
+            return send_json(start_response, {
                 'user': user,
                 'employee': emp_dict,
                 'leave_balances': leaves_dict
             })
 
         if not user:
-            return self.send_error_json('Unauthorized', 401)
+            return send_error_json(start_response, 'Unauthorized', 401)
 
         conn = get_db_connection()
         c = conn.cursor()
 
-        # 1. Employees Directory
+        # Employees Directory
         if path == '/api/employees':
             dept_filter = qparams.get('department', [None])[0]
             status_filter = qparams.get('status', [None])[0]
@@ -235,7 +224,6 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
                 query += " AND (e.manager_id = ? OR e.id = ?)"
                 params.extend([user['employee_id'], user['employee_id']])
             elif user['role'] == 'EMPLOYEE':
-                # Employees see active colleagues directory
                 query += " AND e.status = 'ACTIVE'"
 
             if dept_filter:
@@ -253,7 +241,6 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
             c.execute(query, tuple(params))
             rows = [dict(r) for r in c.fetchall()]
 
-            # Also fetch distinct managers list for Add/Edit dropdowns
             c.execute('''
                 SELECT e.id, e.first_name || ' ' || e.last_name as name, e.designation, e.department
                 FROM employees e
@@ -263,18 +250,17 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
             ''')
             managers = [dict(r) for r in c.fetchall()]
 
-            # Fetch distinct departments
             c.execute("SELECT DISTINCT department FROM employees ORDER BY department ASC")
             departments = [r[0] for r in c.fetchall()]
 
             conn.close()
-            return self.send_json({
+            return send_json(start_response, {
                 'employees': rows,
                 'managers': managers,
                 'departments': departments
             })
 
-        # 2. Attendance Tracker
+        # Attendance Tracker
         if path == '/api/attendance':
             today = date.today().strftime('%Y-%m-%d')
             status_filter = qparams.get('status', [None])[0]
@@ -308,13 +294,11 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
             c.execute(query, tuple(params))
             rows = [dict(r) for r in c.fetchall()]
 
-            # Today's clock state for logged in user
             c.execute('SELECT * FROM attendance WHERE employee_id = ? AND date = ?', (user['employee_id'], today))
             today_att = c.fetchone()
             today_att_dict = dict(today_att) if today_att else None
 
-            # Calculate user's monthly summary stats
-            current_month_prefix = today[:7]  # YYYY-MM
+            current_month_prefix = today[:7]
             c.execute('''
                 SELECT 
                     COUNT(*) as total_days,
@@ -333,13 +317,13 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
             }
 
             conn.close()
-            return self.send_json({
+            return send_json(start_response, {
                 'attendance': rows,
                 'today_attendance': today_att_dict,
                 'month_stats': month_stats_dict
             })
 
-        # 3. Leave Requests
+        # Leave Requests
         if path == '/api/leave-requests':
             status_filter = qparams.get('status', [None])[0]
             type_filter = qparams.get('leave_type', [None])[0]
@@ -379,12 +363,12 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
             lb_dict = dict(lb) if lb else {'casual_leave': 12, 'sick_leave': 10, 'paid_leave': 15}
 
             conn.close()
-            return self.send_json({
+            return send_json(start_response, {
                 'leave_requests': rows,
                 'leave_balances': lb_dict
             })
 
-        # 4. Organization Dashboard Stats
+        # Dashboard Stats
         if path == '/api/dashboard/stats':
             today = date.today().strftime('%Y-%m-%d')
             c.execute("SELECT COUNT(*) FROM employees WHERE status = 'ACTIVE'")
@@ -409,7 +393,7 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
             recent_leaves = [dict(r) for r in c.fetchall()]
 
             conn.close()
-            return self.send_json({
+            return send_json(start_response, {
                 'stats': {
                     'total_employees': total_employees,
                     'present_today': present_today,
@@ -420,11 +404,11 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
                 'recent_leaves': recent_leaves
             })
 
-        # 5. Export Employees to CSV
+        # Export Employees CSV
         if path == '/api/export/employees':
             if user['role'] != 'HR_ADMIN':
                 conn.close()
-                return self.send_error_json('Forbidden: Only HR Admin can export employee records', 403)
+                return send_error_json(start_response, 'Forbidden: HR Admin access required', 403)
 
             c.execute('''
                 SELECT e.emp_code, e.first_name, e.last_name, u.email, u.role,
@@ -449,13 +433,13 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
                                  r['department'], r['designation'], r['salary'], r['joining_date'],
                                  r['phone'] or '', r['address'] or '', r['status'], r['manager_name'] or 'N/A'])
 
-            return self.send_csv(f"employees_export_{date.today()}.csv", output.getvalue())
+            return send_csv(start_response, f"employees_export_{date.today()}.csv", output.getvalue())
 
-        # 6. Export Attendance to CSV
+        # Export Attendance CSV
         if path == '/api/export/attendance':
             if user['role'] not in ('HR_ADMIN', 'MANAGER'):
                 conn.close()
-                return self.send_error_json('Forbidden: Access denied', 403)
+                return send_error_json(start_response, 'Forbidden: Access denied', 403)
 
             c.execute('''
                 SELECT a.date, e.emp_code, e.first_name || ' ' || e.last_name as employee_name,
@@ -476,65 +460,65 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
                                  r['clock_in'] or '', r['clock_out'] or '', r['hours_worked'] or 0,
                                  r['status'], r['notes'] or ''])
 
-            return self.send_csv(f"attendance_export_{date.today()}.csv", output.getvalue())
+            return send_csv(start_response, f"attendance_export_{date.today()}.csv", output.getvalue())
 
         conn.close()
-        return self.send_error_json('Endpoint not found', 404)
+        return send_error_json(start_response, 'Endpoint not found', 404)
 
-    def do_POST(self):
-        path, _ = get_clean_path(self)
-        data = parse_json_body(self)
+    # ----------------------------------------------------
+    # POST Endpoints
+    # ----------------------------------------------------
+    if method == 'POST':
+        data = parse_json_body(environ)
 
-        # Public: Login
+        # Login
         if path == '/api/auth/login':
             email = data.get('email', '').strip().lower()
             password = data.get('password', '').strip()
 
             if not email or not password:
-                return self.send_error_json('Email and password required', 400)
+                return send_error_json(start_response, 'Email and password required', 400)
 
             conn = get_db_connection()
             c = conn.cursor()
             c.execute('SELECT * FROM users WHERE LOWER(email) = ?', (email,))
-            user = c.fetchone()
+            user_row = c.fetchone()
 
-            if not user or not verify_password(user['password_hash'], user['salt'], password):
+            if not user_row or not verify_password(user_row['password_hash'], user_row['salt'], password):
                 conn.close()
-                return self.send_error_json('Invalid email or password', 401)
+                return send_error_json(start_response, 'Invalid email or password', 401)
 
-            # Check if associated employee is inactive
-            c.execute('SELECT * FROM employees WHERE user_id = ?', (user['id'],))
+            c.execute('SELECT * FROM employees WHERE user_id = ?', (user_row['id'],))
             emp = c.fetchone()
             emp_dict = dict(emp) if emp else {}
 
             if emp_dict.get('status') == 'INACTIVE':
                 conn.close()
-                return self.send_error_json('Account is deactivated. Please contact HR.', 403)
+                return send_error_json(start_response, 'Account is deactivated. Please contact HR.', 403)
 
             token = str(uuid.uuid4())
             expires_at = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
 
             c.execute('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)',
-                      (token, user['id'], expires_at))
+                      (token, user_row['id'], expires_at))
             conn.commit()
             conn.close()
 
-            return self.send_json({
+            return send_json(start_response, {
                 'message': 'Login successful',
                 'token': token,
                 'user': {
-                    'id': user['id'],
-                    'email': user['email'],
-                    'role': user['role']
+                    'id': user_row['id'],
+                    'email': user_row['email'],
+                    'role': user_row['role']
                 },
                 'employee': emp_dict
             })
 
-        # All subsequent endpoints require authentication
-        token = get_auth_token(self)
+        token = get_auth_token(environ)
         user = get_current_user(token)
         if not user:
-            return self.send_error_json('Unauthorized or session expired', 401)
+            return send_error_json(start_response, 'Unauthorized or session expired', 401)
 
         conn = get_db_connection()
         c = conn.cursor()
@@ -544,7 +528,7 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
             c.execute('DELETE FROM sessions WHERE token = ?', (token,))
             conn.commit()
             conn.close()
-            return self.send_json({'message': 'Logged out successfully'})
+            return send_json(start_response, {'message': 'Logged out successfully'})
 
         # Change Password
         if path == '/api/auth/change-password':
@@ -553,28 +537,27 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             if not current_pwd or not new_pwd:
                 conn.close()
-                return self.send_error_json('Current and new password are required', 400)
+                return send_error_json(start_response, 'Current and new password are required', 400)
 
             if len(new_pwd) < 6:
                 conn.close()
-                return self.send_error_json('New password must be at least 6 characters long', 400)
+                return send_error_json(start_response, 'New password must be at least 6 characters long', 400)
 
             c.execute('SELECT password_hash, salt FROM users WHERE id = ?', (user['id'],))
             u_row = c.fetchone()
             if not u_row or not verify_password(u_row['password_hash'], u_row['salt'], current_pwd):
                 conn.close()
-                return self.send_error_json('Current password is incorrect', 400)
+                return send_error_json(start_response, 'Current password is incorrect', 400)
 
             new_hash, new_salt = hash_password(new_pwd)
             c.execute('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?', (new_hash, new_salt, user['id']))
             conn.commit()
             conn.close()
-            return self.send_json({'message': 'Password changed successfully'})
+            return send_json(start_response, {'message': 'Password changed successfully'})
 
-        # Attendance: Clock In
+        # Clock In
         if path == '/api/attendance/clock-in':
             today = date.today().strftime('%Y-%m-%d')
-            # Support client-passed local time if provided, otherwise server time
             client_time = data.get('client_time')
             now_time = client_time if client_time and len(client_time) == 8 else datetime.now().strftime('%H:%M:%S')
 
@@ -583,7 +566,7 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             if existing:
                 conn.close()
-                return self.send_error_json('Already clocked in today', 400)
+                return send_error_json(start_response, 'Already clocked in today', 400)
 
             status = 'LATE' if now_time > '09:15:00' else 'PRESENT'
             notes = data.get('notes', 'Clocked in via portal')
@@ -592,9 +575,9 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
                          VALUES (?, ?, ?, ?, ?)''', (user['employee_id'], today, now_time, status, notes))
             conn.commit()
             conn.close()
-            return self.send_json({'message': 'Clocked in successfully', 'time': now_time, 'status': status})
+            return send_json(start_response, {'message': 'Clocked in successfully', 'time': now_time, 'status': status})
 
-        # Attendance: Clock Out
+        # Clock Out
         if path == '/api/attendance/clock-out':
             today = date.today().strftime('%Y-%m-%d')
             client_time = data.get('client_time')
@@ -605,28 +588,28 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             if not existing:
                 conn.close()
-                return self.send_error_json('Must clock in before clocking out', 400)
+                return send_error_json(start_response, 'Must clock in before clocking out', 400)
 
             if existing['clock_out']:
                 conn.close()
-                return self.send_error_json('Already clocked out today', 400)
+                return send_error_json(start_response, 'Already clocked out today', 400)
 
             hours = calculate_hours_worked(existing['clock_in'], now_time)
 
             c.execute('UPDATE attendance SET clock_out = ?, hours_worked = ? WHERE id = ?', (now_time, hours, existing['id']))
             conn.commit()
             conn.close()
-            return self.send_json({
+            return send_json(start_response, {
                 'message': 'Clocked out successfully',
                 'time': now_time,
                 'hours_worked': hours
             })
 
-        # Register New Employee (HR_ADMIN only)
+        # Add Employee (HR_ADMIN)
         if path == '/api/employees':
             if user['role'] != 'HR_ADMIN':
                 conn.close()
-                return self.send_error_json('Forbidden: Only HR Admin can add employees', 403)
+                return send_error_json(start_response, 'Forbidden: Only HR Admin can add employees', 403)
 
             email = data.get('email', '').strip().lower()
             password = data.get('password', 'Password123!')
@@ -645,7 +628,6 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
             except (ValueError, TypeError):
                 salary = 0.0
 
-            # Safe manager_id parsing
             mgr_raw = data.get('manager_id')
             manager_id = None
             if mgr_raw not in (None, '', 'null', 'None'):
@@ -656,11 +638,11 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             if not email or not emp_code or not first_name or not last_name:
                 conn.close()
-                return self.send_error_json('First name, last name, email, and employee code are required', 400)
+                return send_error_json(start_response, 'First name, last name, email, and employee code are required', 400)
 
             if role not in ('HR_ADMIN', 'MANAGER', 'EMPLOYEE'):
                 conn.close()
-                return self.send_error_json('Invalid role specified', 400)
+                return send_error_json(start_response, 'Invalid role specified', 400)
 
             p_hash, salt = hash_password(password)
             try:
@@ -677,10 +659,10 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
                 c.execute('INSERT INTO leave_balances (employee_id, casual_leave, sick_leave, paid_leave) VALUES (?, 12, 10, 15)', (new_emp_id,))
                 conn.commit()
                 conn.close()
-                return self.send_json({'message': 'Employee registered successfully', 'employee_id': new_emp_id}, 201)
+                return send_json(start_response, {'message': 'Employee registered successfully', 'employee_id': new_emp_id}, 201)
             except sqlite3.IntegrityError:
                 conn.close()
-                return self.send_error_json('Email or Employee Code already exists in the system', 400)
+                return send_error_json(start_response, 'Email or Employee Code already exists in the system', 400)
 
         # Submit Leave Request
         if path == '/api/leave-requests':
@@ -691,11 +673,11 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             if leave_type not in ('CASUAL', 'SICK', 'PAID', 'UNPAID'):
                 conn.close()
-                return self.send_error_json('Invalid leave type', 400)
+                return send_error_json(start_response, 'Invalid leave type', 400)
 
             if not start_date or not end_date or not reason:
                 conn.close()
-                return self.send_error_json('Start date, end date, and reason are required', 400)
+                return send_error_json(start_response, 'Start date, end date, and reason are required', 400)
 
             try:
                 d1 = datetime.strptime(start_date, '%Y-%m-%d')
@@ -703,20 +685,19 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
                 days_count = (d2 - d1).days + 1
             except ValueError:
                 conn.close()
-                return self.send_error_json('Dates must be in YYYY-MM-DD format', 400)
+                return send_error_json(start_response, 'Dates must be in YYYY-MM-DD format', 400)
 
             if days_count <= 0:
                 conn.close()
-                return self.send_error_json('End date must be on or after start date', 400)
+                return send_error_json(start_response, 'End date must be on or after start date', 400)
 
-            # Check leave balances if not unpaid
             if leave_type in ('CASUAL', 'SICK', 'PAID'):
                 balance_col = leave_type.lower() + '_leave'
                 c.execute(f'SELECT {balance_col} FROM leave_balances WHERE employee_id = ?', (user['employee_id'],))
                 lb_row = c.fetchone()
                 if lb_row and lb_row[0] < days_count:
                     conn.close()
-                    return self.send_error_json(f'Insufficient {leave_type.capitalize()} leave balance ({lb_row[0]} days remaining)', 400)
+                    return send_error_json(start_response, f'Insufficient {leave_type.capitalize()} leave balance ({lb_row[0]} days remaining)', 400)
 
             c.execute('''INSERT INTO leave_requests
                 (employee_id, leave_type, start_date, end_date, days_count, reason, status)
@@ -724,48 +705,45 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
                 (user['employee_id'], leave_type, start_date, end_date, days_count, reason))
             conn.commit()
             conn.close()
-            return self.send_json({'message': 'Leave application submitted successfully'}, 201)
+            return send_json(start_response, {'message': 'Leave application submitted successfully'}, 201)
 
-        # Review Leave Request (HR_ADMIN or MANAGER)
+        # Review Leave Request
         if path.startswith('/api/leave-requests/') and path.endswith('/review'):
             if user['role'] not in ('HR_ADMIN', 'MANAGER'):
                 conn.close()
-                return self.send_error_json('Forbidden: Only Manager or HR Admin can review leave requests', 403)
+                return send_error_json(start_response, 'Forbidden: Only Manager or HR Admin can review leave requests', 403)
 
             parts = path.split('/')
             leave_id = parts[3]
-            status = data.get('status')  # 'APPROVED' or 'REJECTED'
+            status = data.get('status')
             review_comment = data.get('review_comment', '').strip()
 
             if status not in ('APPROVED', 'REJECTED'):
                 conn.close()
-                return self.send_error_json('Status must be APPROVED or REJECTED', 400)
+                return send_error_json(start_response, 'Status must be APPROVED or REJECTED', 400)
 
             c.execute('SELECT * FROM leave_requests WHERE id = ?', (leave_id,))
             req = c.fetchone()
 
             if not req:
                 conn.close()
-                return self.send_error_json('Leave request not found', 404)
+                return send_error_json(start_response, 'Leave request not found', 404)
 
-            # Prevent double-review / repeated deduction bug
             if req['status'] != 'PENDING':
                 conn.close()
-                return self.send_error_json(f'Leave request has already been reviewed ({req["status"]})', 400)
+                return send_error_json(start_response, f'Leave request has already been reviewed ({req["status"]})', 400)
 
-            # Restrict manager review to their direct reports
             if user['role'] == 'MANAGER':
                 c.execute('SELECT manager_id FROM employees WHERE id = ?', (req['employee_id'],))
                 emp_row = c.fetchone()
                 if not emp_row or (emp_row['manager_id'] != user['employee_id'] and req['employee_id'] != user['employee_id']):
                     conn.close()
-                    return self.send_error_json('Forbidden: You can only review leave requests for your team', 403)
+                    return send_error_json(start_response, 'Forbidden: You can only review leave requests for your team', 403)
 
             c.execute('''UPDATE leave_requests
                          SET status = ?, reviewed_by = ?, review_comment = ?
                          WHERE id = ?''', (status, user['employee_id'], review_comment, leave_id))
 
-            # Deduct from balance if approved and applicable
             LEAVE_BALANCE_COLS = {
                 'CASUAL': 'casual_leave',
                 'SICK': 'sick_leave',
@@ -779,9 +757,9 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             conn.commit()
             conn.close()
-            return self.send_json({'message': f'Leave request {status.lower()} successfully'})
+            return send_json(start_response, {'message': f'Leave request {status.lower()} successfully'})
 
-        # Cancel Leave Request (Employee self-cancellation for PENDING leaves)
+        # Cancel Leave Request
         if path.startswith('/api/leave-requests/') and path.endswith('/cancel'):
             parts = path.split('/')
             leave_id = parts[3]
@@ -791,26 +769,26 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             if not req:
                 conn.close()
-                return self.send_error_json('Leave request not found', 404)
+                return send_error_json(start_response, 'Leave request not found', 404)
 
             if req['employee_id'] != user['employee_id'] and user['role'] != 'HR_ADMIN':
                 conn.close()
-                return self.send_error_json('Forbidden: You cannot cancel this leave request', 403)
+                return send_error_json(start_response, 'Forbidden: You cannot cancel this leave request', 403)
 
             if req['status'] != 'PENDING':
                 conn.close()
-                return self.send_error_json('Only pending leave requests can be cancelled', 400)
+                return send_error_json(start_response, 'Only pending leave requests can be cancelled', 400)
 
             c.execute("UPDATE leave_requests SET status = 'CANCELLED' WHERE id = ?", (leave_id,))
             conn.commit()
             conn.close()
-            return self.send_json({'message': 'Leave request cancelled successfully'})
+            return send_json(start_response, {'message': 'Leave request cancelled successfully'})
 
-        # Admin: Reset Demo Data
+        # Reset Demo Data
         if path == '/api/admin/reset-demo':
             if user['role'] != 'HR_ADMIN':
                 conn.close()
-                return self.send_error_json('Forbidden: HR Admin access required', 403)
+                return send_error_json(start_response, 'Forbidden: HR Admin access required', 403)
 
             c.execute('DELETE FROM sessions')
             c.execute('DELETE FROM attendance')
@@ -821,19 +799,21 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
             seed_data(c)
             conn.commit()
             conn.close()
-            return self.send_json({'message': 'Database reset to demo state successfully'})
+            return send_json(start_response, {'message': 'Database reset to demo state successfully'})
 
         conn.close()
-        return self.send_error_json('Endpoint not found', 404)
+        return send_error_json(start_response, 'Endpoint not found', 404)
 
-    def do_PUT(self):
-        path, _ = get_clean_path(self)
-        token = get_auth_token(self)
+    # ----------------------------------------------------
+    # PUT Endpoints
+    # ----------------------------------------------------
+    if method == 'PUT':
+        token = get_auth_token(environ)
         user = get_current_user(token)
         if not user:
-            return self.send_error_json('Unauthorized or session expired', 401)
+            return send_error_json(start_response, 'Unauthorized or session expired', 401)
 
-        data = parse_json_body(self)
+        data = parse_json_body(environ)
         conn = get_db_connection()
         c = conn.cursor()
 
@@ -844,13 +824,13 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
             c.execute('UPDATE employees SET phone = ?, address = ? WHERE id = ?', (phone, address, user['employee_id']))
             conn.commit()
             conn.close()
-            return self.send_json({'message': 'Profile updated successfully'})
+            return send_json(start_response, {'message': 'Profile updated successfully'})
 
-        # Update Employee (HR_ADMIN only)
+        # Update Employee (HR_ADMIN)
         if path.startswith('/api/employees/'):
             if user['role'] != 'HR_ADMIN':
                 conn.close()
-                return self.send_error_json('Forbidden: HR Admin access required', 403)
+                return send_error_json(start_response, 'Forbidden: HR Admin access required', 403)
 
             parts = path.split('/')
             emp_id = parts[3]
@@ -860,9 +840,8 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             if not emp:
                 conn.close()
-                return self.send_error_json('Employee not found', 404)
+                return send_error_json(start_response, 'Employee not found', 404)
 
-            # Safe manager parsing
             mgr_raw = data.get('manager_id', emp['manager_id'])
             manager_id = None
             if mgr_raw not in (None, '', 'null', 'None'):
@@ -901,24 +880,24 @@ class EMSRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             conn.commit()
             conn.close()
-            return self.send_json({'message': 'Employee record updated successfully'})
+            return send_json(start_response, {'message': 'Employee record updated successfully'})
 
         conn.close()
-        return self.send_error_json('Endpoint not found', 404)
+        return send_error_json(start_response, 'Endpoint not found', 404)
+
+    return send_error_json(start_response, 'Method not allowed', 405)
+
+# Entrypoint aliases for WSGI servers (Vercel, Gunicorn, uWSGI)
+application = app
 
 def run_server():
     os.chdir(STATIC_DIR)
     print(f"Employee Management System running on http://0.0.0.0:{PORT} (Serving {STATIC_DIR})", flush=True)
-    with socketserver.TCPServer(("0.0.0.0", PORT), EMSRequestHandler) as httpd:
+    with make_server("0.0.0.0", PORT, app) as httpd:
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
             httpd.server_close()
-
-# Vercel entrypoints
-handler = EMSRequestHandler
-app = EMSRequestHandler
-application = EMSRequestHandler
 
 if __name__ == '__main__':
     run_server()
