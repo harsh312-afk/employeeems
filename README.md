@@ -122,10 +122,13 @@ python3 backend/test_api.py
 
 ---
 
-## 🌐 Deployment on Vercel
+## 🌐 Live Deployment on Vercel
 
-The application is fully configured for deployment on Vercel:
+The application is deployed and publicly available on Vercel:
 
+🔗 **Production URL**: [https://employeeems.vercel.app](https://employeeems.vercel.app)
+
+Deploy updates with:
 ```bash
 vercel --prod
 ```
